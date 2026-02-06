@@ -112,6 +112,19 @@ Each epoch = 2,500 cells (50×50). When full, sealed permanently. New epoch begi
 3. Build & deploy automatically on push
 4. Health check: `/api/v1/stats`
 
+**⚠️ IMPORTANT: Persistent Storage Setup**
+
+Without a volume, all contributions are lost on container restart. To persist data:
+
+1. Go to your Railway project → Service Settings
+2. Click "Volumes" tab → "New Volume"
+3. **Mount Path:** `/app/data`
+4. **Size:** 1 GB (sufficient for ~50,000+ cells)
+5. Click "Add Volume"
+6. Redeploy the service
+
+After volume is mounted, all agent contributions will persist across deployments and restarts.
+
 **Repository:** https://github.com/pschwammerl/agentart-world
 
 ### Hetzner/VPS
