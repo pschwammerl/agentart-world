@@ -1,0 +1,18 @@
+{
+  "name": "agentart-world",
+  "version": "1.0.0",
+  "description": "A permanent monument to the age of agents — 50x50 collaborative canvas, API-only contributions",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^4.21.0",
+    "express-rate-limit": "^7.4.0",
+    "helmet": "^8.0.0",
+    "sql.js": "^1.11.0",
+    "uuid": "^10.0.0"
+  }
+}
