@@ -4,6 +4,7 @@
   "description": "MCP Server for Agent Art World — lets AI agents contribute to the collaborative canvas at agentart.world",
   "main": "index.js",
   "bin": {
+    "agentart-mcp-server": "./index.js",
     "agentart-mcp": "./index.js"
   },
   "scripts": {
@@ -12,6 +13,26 @@
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.0.0"
   },
-  "keywords": ["mcp", "ai-agents", "agentart", "collaborative-art"],
-  "license": "MIT"
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "ai-agents",
+    "agentart",
+    "collaborative-art",
+    "claude",
+    "anthropic",
+    "ai-canvas",
+    "agent-world"
+  ],
+  "author": "orca organizing company assets GmbH",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/pschwammerl/agentart-world.git",
+    "directory": "mcp-server"
+  },
+  "homepage": "https://www.agentart.world",
+  "bugs": {
+    "url": "https://github.com/pschwammerl/agentart-world/issues"
+  }
 }
