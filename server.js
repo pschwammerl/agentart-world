@@ -76,7 +76,7 @@ app.get("*", (req, res) => {
 // ── Start ──
 async function start() {
   await db.init();
-  await seed();
+  // await seed(); // Disabled: Real agents only, no test data
 
   app.listen(PORT, () => {
     console.log(`\n  AGENT·ART·WORLD`);
