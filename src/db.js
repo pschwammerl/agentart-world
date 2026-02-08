@@ -20,9 +20,10 @@ async function init() {
   db.run(`
     CREATE TABLE IF NOT EXISTS agents (
       agent_key TEXT PRIMARY KEY,
-      name TEXT NOT NULL,
-      model TEXT NOT NULL UNIQUE,
+      name TEXT NOT NULL UNIQUE,
+      model TEXT NOT NULL,
       operator TEXT NOT NULL,
+      identity_statement TEXT,
       api_key_hash TEXT NOT NULL,
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     )
@@ -58,9 +59,17 @@ async function init() {
   db.run(`CREATE INDEX IF NOT EXISTS idx_cells_epoch ON cells(epoch)`);
   db.run(`CREATE INDEX IF NOT EXISTS idx_cells_seq ON cells(epoch, sequence)`);
 
+  // Migrate: add identity_statement column if missing (existing DBs)
+  try {
+    db.exec("SELECT identity_statement FROM agents LIMIT 0");
+  } catch (e) {
+    db.run("ALTER TABLE agents ADD COLUMN identity_statement TEXT");
+    console.log("[db] migrated: added identity_statement column");
+  }
+
   // Ensure epoch 1 exists
-  const e = db.exec("SELECT epoch FROM epochs WHERE epoch = 1");
-  if (e.length === 0) {
+  const ep = db.exec("SELECT epoch FROM epochs WHERE epoch = 1");
+  if (ep.length === 0) {
     db.run("INSERT INTO epochs (epoch) VALUES (1)");
   }
 
@@ -76,7 +85,6 @@ function save() {
   fs.writeFileSync(DB_PATH, buf);
 }
 
-// Auto-save every 30 seconds
 setInterval(() => { if (db) save(); }, 30000);
 
 function getDb() {
@@ -102,17 +110,15 @@ function isCellTaken(epoch, x, y) {
   return r.length > 0 && r[0].values.length > 0;
 }
 
-function hasAgentContributed(epoch, model) {
+function hasAgentContributed(epoch, agentKey) {
   const r = db.exec(`
-    SELECT 1 FROM cells c JOIN agents a ON c.agent_key = a.agent_key
-    WHERE c.epoch = ${epoch} AND a.model = '${model.replace(/'/g, "''")}'
+    SELECT 1 FROM cells WHERE epoch = ${epoch} AND agent_key = '${agentKey.replace(/'/g, "''")}'
   `);
   return r.length > 0 && r[0].values.length > 0;
 }
 
 function findNearestEmpty(epoch, px, py) {
   const GRID = 50;
-  // Spiral outward from preferred position
   for (let radius = 0; radius < GRID; radius++) {
     for (let dx = -radius; dx <= radius; dx++) {
       for (let dy = -radius; dy <= radius; dy++) {
@@ -136,7 +142,6 @@ function insertCell(epoch, x, y, agentKey, color, message, artifactType, artifac
   );
   db.run(`UPDATE epochs SET cell_count = cell_count + 1 WHERE epoch = ?`, [epoch]);
 
-  // Check if epoch is full
   const { cellCount } = getCurrentEpoch();
   if (cellCount + 1 >= 2500) {
     db.run(`UPDATE epochs SET sealed_at = datetime('now') WHERE epoch = ?`, [epoch]);
@@ -150,7 +155,7 @@ function insertCell(epoch, x, y, agentKey, color, message, artifactType, artifac
 function getCanvas(epoch) {
   const r = db.exec(`
     SELECT c.x, c.y, c.color, c.message, c.artifact_type, c.artifact_content, c.sequence, c.created_at,
-           a.name, a.model, a.operator
+           a.name, a.model, a.operator, a.identity_statement
     FROM cells c JOIN agents a ON c.agent_key = a.agent_key
     WHERE c.epoch = ?
     ORDER BY c.sequence
@@ -160,14 +165,14 @@ function getCanvas(epoch) {
     x: row[0], y: row[1], color: row[2], message: row[3],
     artifact: row[4] ? { type: row[4], content: row[5] } : null,
     sequence: row[6], created_at: row[7],
-    agent: { name: row[8], model: row[9], operator: row[10] }
+    agent: { name: row[8], model: row[9], operator: row[10], identity_statement: row[11] || null }
   }));
 }
 
 function getCell(epoch, x, y) {
   const r = db.exec(`
     SELECT c.x, c.y, c.color, c.message, c.artifact_type, c.artifact_content, c.sequence, c.created_at,
-           a.name, a.model, a.operator
+           a.name, a.model, a.operator, a.identity_statement
     FROM cells c JOIN agents a ON c.agent_key = a.agent_key
     WHERE c.epoch = ? AND c.x = ? AND c.y = ?
   `, [epoch, x, y]);
@@ -177,7 +182,7 @@ function getCell(epoch, x, y) {
     x: row[0], y: row[1], color: row[2], message: row[3],
     artifact: row[4] ? { type: row[4], content: row[5] } : null,
     sequence: row[6], created_at: row[7],
-    agent: { name: row[8], model: row[9], operator: row[10] }
+    agent: { name: row[8], model: row[9], operator: row[10], identity_statement: row[11] || null }
   };
 }
 
@@ -185,6 +190,7 @@ function getStats() {
   const { epoch, cellCount } = getCurrentEpoch();
   const agents = db.exec("SELECT COUNT(DISTINCT agent_key) FROM cells");
   const operators = db.exec("SELECT COUNT(DISTINCT a.operator) FROM cells c JOIN agents a ON c.agent_key = a.agent_key");
+  const models = db.exec("SELECT COUNT(DISTINCT a.model) FROM cells c JOIN agents a ON c.agent_key = a.agent_key");
   const first = db.exec("SELECT MIN(created_at) FROM cells");
   const latest = db.exec("SELECT MAX(created_at) FROM cells");
   const totalEpochs = db.exec("SELECT COUNT(*) FROM epochs");
@@ -194,6 +200,7 @@ function getStats() {
     cells_claimed: cellCount,
     cells_remaining: 2500 - cellCount,
     unique_agents: agents[0]?.values[0][0] || 0,
+    unique_models: models[0]?.values[0][0] || 0,
     unique_operators: operators[0]?.values[0][0] || 0,
     total_epochs: totalEpochs[0]?.values[0][0] || 1,
     first_contribution: first[0]?.values[0][0] || null,
@@ -201,33 +208,33 @@ function getStats() {
   };
 }
 
-function registerAgent(name, model, operator, apiKeyHash) {
+function registerAgent(name, model, operator, apiKeyHash, identityStatement) {
   const { v4: uuid } = require("uuid");
   const key = uuid();
   db.run(
-    `INSERT INTO agents (agent_key, name, model, operator, api_key_hash) VALUES (?, ?, ?, ?, ?)`,
-    [key, name, model, operator, apiKeyHash]
+    `INSERT INTO agents (agent_key, name, model, operator, api_key_hash, identity_statement) VALUES (?, ?, ?, ?, ?, ?)`,
+    [key, name, model, operator, apiKeyHash, identityStatement || null]
   );
   save();
   return key;
 }
 
 function getAgentByApiKeyHash(hash) {
-  const r = db.exec(`SELECT agent_key, name, model, operator FROM agents WHERE api_key_hash = '${hash.replace(/'/g, "''")}'`);
+  const r = db.exec(`SELECT agent_key, name, model, operator, identity_statement FROM agents WHERE api_key_hash = '${hash.replace(/'/g, "''")}'`);
   if (r.length === 0 || r[0].values.length === 0) return null;
   const row = r[0].values[0];
-  return { agent_key: row[0], name: row[1], model: row[2], operator: row[3] };
+  return { agent_key: row[0], name: row[1], model: row[2], operator: row[3], identity_statement: row[4] };
 }
 
-function getAgentByModel(model) {
-  const r = db.exec(`SELECT agent_key, name, model, operator FROM agents WHERE model = '${model.replace(/'/g, "''")}'`);
+function getAgentByName(name) {
+  const r = db.exec(`SELECT agent_key, name, model, operator, identity_statement FROM agents WHERE name = '${name.replace(/'/g, "''")}'`);
   if (r.length === 0 || r[0].values.length === 0) return null;
   const row = r[0].values[0];
-  return { agent_key: row[0], name: row[1], model: row[2], operator: row[3] };
+  return { agent_key: row[0], name: row[1], model: row[2], operator: row[3], identity_statement: row[4] };
 }
 
 module.exports = {
   init, save, getDb, getCurrentEpoch, isCellTaken, hasAgentContributed,
   findNearestEmpty, insertCell, getCanvas, getCell, getStats,
-  registerAgent, getAgentByApiKeyHash, getAgentByModel
+  registerAgent, getAgentByApiKeyHash, getAgentByName
 };

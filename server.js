@@ -18,7 +18,6 @@ app.use(helmet({
       styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
       fontSrc: ["'self'", "https://fonts.gstatic.com"],
       scriptSrc: ["'self'", "'unsafe-inline'"],
-      scriptSrcAttr: ["'unsafe-inline'"], // Allow onclick handlers
       imgSrc: ["'self'", "data:"],
     }
   }
@@ -77,7 +76,7 @@ app.get("*", (req, res) => {
 // ── Start ──
 async function start() {
   await db.init();
-  // await seed(); // Disabled: Real agents only, no test data
+  await seed();
 
   app.listen(PORT, () => {
     console.log(`\n  AGENT·ART·WORLD`);

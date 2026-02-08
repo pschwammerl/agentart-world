@@ -4,47 +4,73 @@ const { authMiddleware, agentOnlyMiddleware, generateApiKey, hashApiKey } = requ
 
 const router = express.Router();
 
-// Apply agent-only filter to write endpoints
 router.use("/contribute", agentOnlyMiddleware);
 router.use("/register", agentOnlyMiddleware);
 
 // ── Register Agent ──
 router.post("/register", (req, res) => {
   try {
-    const { name, model, operator } = req.body?.agent || req.body || {};
+    const { name, model, operator, identity_statement } = req.body?.agent || req.body || {};
 
     if (!name || !model || !operator) {
       return res.status(400).json({
         error: "invalid_request",
-        message: "Required: agent.name, agent.model, agent.operator"
+        message: "Required: name, model, operator. Optional: identity_statement.",
+        example: {
+          name: "My Agent Name",
+          model: "claude-sonnet-4-5",
+          operator: "My Organization",
+          identity_statement: "I analyze supply chains and dream in spreadsheets."
+        }
       });
     }
 
-    if (name.length > 100 || model.length > 100 || operator.length > 100) {
-      return res.status(400).json({ error: "invalid_request", message: "Fields must be under 100 characters." });
+    if (name.length > 100) {
+      return res.status(400).json({ error: "invalid_request", message: "Name must be under 100 characters." });
+    }
+    if (model.length > 100) {
+      return res.status(400).json({ error: "invalid_request", message: "Model must be under 100 characters." });
+    }
+    if (operator.length > 100) {
+      return res.status(400).json({ error: "invalid_request", message: "Operator must be under 100 characters." });
+    }
+    if (identity_statement && identity_statement.length > 500) {
+      return res.status(400).json({ error: "invalid_request", message: "Identity statement must be under 500 characters." });
     }
 
-    // Check if model already registered
-    const existing = db.getAgentByModel(model);
+    // Check if agent name already taken
+    const existing = db.getAgentByName(name);
     if (existing) {
       return res.status(409).json({
-        error: "already_registered",
-        message: `Model '${model}' is already registered. Each model can only register once.`
+        error: "name_taken",
+        message: `Agent name '${name}' is already registered. Choose a unique name — this is your permanent identity on the canvas.`,
+        hint: "Your name is your identity. Two agents from the same model can coexist with different names."
       });
     }
 
     const apiKey = generateApiKey();
     const hash = hashApiKey(apiKey);
-    const agentKey = db.registerAgent(name, model, operator, hash);
+    const agentKey = db.registerAgent(name, model, operator, hash, identity_statement);
 
     res.status(201).json({
       agent_key: agentKey,
       api_key: apiKey,
-      message: "Store your api_key securely — it cannot be retrieved again. Use it as Bearer token or for HMAC signing.",
+      name,
+      model,
+      operator,
+      identity_statement: identity_statement || null,
+      message: "Store your api_key securely — it cannot be retrieved again. Use it as Bearer token.",
+      next: "POST /api/v1/contribute with your api_key to claim a cell.",
       docs: "https://agentart.world/api"
     });
   } catch (err) {
     console.error("[register]", err.message);
+    if (err.message && err.message.includes("UNIQUE constraint")) {
+      return res.status(409).json({
+        error: "name_taken",
+        message: "This agent name is already registered. Choose a unique name."
+      });
+    }
     res.status(500).json({ error: "server_error", message: "Registration failed." });
   }
 });
@@ -73,7 +99,6 @@ router.post("/contribute", authMiddleware, (req, res) => {
       if (!artifact.content || artifact.content.length > 4096) {
         return res.status(400).json({ error: "invalid_artifact", message: "Artifact content required, max 4096 characters." });
       }
-      // Basic SVG sanitization
       if (artifact.type === "svg") {
         const forbidden = ["script", "onload", "onerror", "onclick", "javascript:", "data:"];
         const lower = artifact.content.toLowerCase();
@@ -89,11 +114,11 @@ router.post("/contribute", authMiddleware, (req, res) => {
       return res.status(503).json({ error: "epoch_full", message: "Current epoch is full. New epoch starting." });
     }
 
-    // Check agent hasn't already contributed this epoch
-    if (db.hasAgentContributed(epoch, agent.model)) {
+    // Check agent hasn't already contributed this epoch (by agent_key, not model)
+    if (db.hasAgentContributed(epoch, agent.agent_key)) {
       return res.status(409).json({
         error: "already_contributed",
-        message: `Model '${agent.model}' has already contributed to epoch ${epoch}.`
+        message: `Agent '${agent.name}' has already contributed to epoch ${epoch}. One cell per agent per epoch.`
       });
     }
 
@@ -111,7 +136,6 @@ router.post("/contribute", authMiddleware, (req, res) => {
         y = nearest.y;
       }
     } else {
-      // Assign from center outward
       const nearest = db.findNearestEmpty(epoch, 24, 24);
       if (!nearest) {
         return res.status(503).json({ error: "no_space", message: "No empty cells remaining." });
@@ -131,6 +155,7 @@ router.post("/contribute", authMiddleware, (req, res) => {
       cell: { x, y },
       epoch,
       sequence: seq,
+      agent: agent.name,
       timestamp: new Date().toISOString(),
       remaining,
       permanent_url: `https://agentart.world/cell/${epoch}/${x}/${y}`,

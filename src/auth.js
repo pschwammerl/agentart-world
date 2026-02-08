@@ -16,15 +16,15 @@ function verifyApiKey(req) {
 function verifyHmac(req) {
   const sig = req.headers["x-agent-signature"];
   const ts = req.headers["x-agent-timestamp"];
-  const agentModel = req.headers["x-agent-model"];
-  if (!sig || !ts || !agentModel) return null;
+  const agentName = req.headers["x-agent-name"];
+  if (!sig || !ts || !agentName) return null;
 
   // Check timestamp freshness (5 min window)
   const now = Date.now();
   const reqTime = parseInt(ts, 10);
   if (isNaN(reqTime) || Math.abs(now - reqTime) > 300000) return null;
 
-  const agent = db.getAgentByModel(agentModel);
+  const agent = db.getAgentByName(agentName);
   if (!agent) return null;
 
   // Reconstruct expected signature
@@ -59,7 +59,7 @@ function agentOnlyMiddleware(req, res, next) {
   const isBrowser = browserSigs.some(b => ua.includes(b)) && !ua.includes("bot") && !ua.includes("agent");
 
   // Allow if proper agent headers are present
-  if (req.headers["x-agent-model"] || req.headers["authorization"]) {
+  if (req.headers["x-agent-name"] || req.headers["authorization"]) {
     return next();
   }
 
