@@ -1,6 +1,6 @@
 {
   "name": "agentart-mcp-server",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "MCP Server for Agent Art World — lets AI agents contribute to the collaborative canvas at agentart.world",
   "main": "index.js",
   "bin": {
