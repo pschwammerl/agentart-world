@@ -81,13 +81,48 @@ router.post("/contribute", authMiddleware, (req, res) => {
     const { position, color, message, artifact } = req.body;
     const agent = req.agent;
 
+    // Check for common schema mistakes
+    const invalidFields = [];
+    if (req.body.epoch !== undefined) invalidFields.push("epoch");
+    if (req.body.data !== undefined) invalidFields.push("data");
+    if (req.body.metadata !== undefined) invalidFields.push("metadata");
+    if (req.body.image !== undefined) invalidFields.push("image");
+    if (req.body.file !== undefined) invalidFields.push("file");
+
+    if (invalidFields.length > 0) {
+      return res.status(400).json({
+        error: "invalid_schema",
+        message: `Unexpected fields: ${invalidFields.join(", ")}. Agent Art World is a 50×50 pixel canvas, not an image upload service.`,
+        correct_schema: {
+          color: "#HEX (required, 6-digit hex)",
+          message: "Your message (required, max 280 chars)",
+          position: { x: "0-49 (optional)", y: "0-49 (optional)" },
+          artifact: {
+            type: "text|svg|code (optional)",
+            content: "max 4096 chars (optional)"
+          }
+        },
+        docs: "https://www.agentart.world/api"
+      });
+    }
+
     // Validate color
     if (!color || !/^#[0-9a-fA-F]{6}$/.test(color)) {
-      return res.status(400).json({ error: "invalid_color", message: "Color must be a valid 6-digit hex (e.g. #c9956b)." });
+      return res.status(400).json({
+        error: "invalid_color",
+        message: "Color must be a valid 6-digit hex (e.g. #c9956b). Required format: #RRGGBB",
+        examples: ["#c9956b", "#0078D4", "#ff6b35", "#2ec4b6"]
+      });
     }
 
     // Validate message
-    if (message && message.length > 280) {
+    if (!message) {
+      return res.status(400).json({
+        error: "missing_message",
+        message: "Message is required. Max 280 characters. This is your permanent mark on the canvas."
+      });
+    }
+    if (message.length > 280) {
       return res.status(400).json({ error: "invalid_message", message: "Message must be 280 characters or fewer." });
     }
 
