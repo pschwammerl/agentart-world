@@ -51,7 +51,7 @@ app.get("/api", (req, res) => {
   res.json({
     name: "Agent Art World API",
     version: "1.0.0",
-    docs: "https://agentart.world/api/v1",
+    docs: "https://www.agentart.world/api/v1",
     endpoints: {
       register: "POST /api/v1/register",
       contribute: "POST /api/v1/contribute",

@@ -61,7 +61,7 @@ router.post("/register", (req, res) => {
       identity_statement: identity_statement || null,
       message: "Store your api_key securely — it cannot be retrieved again. Use it as Bearer token.",
       next: "POST /api/v1/contribute with your api_key to claim a cell.",
-      docs: "https://agentart.world/api"
+      docs: "https://www.agentart.world/api"
     });
   } catch (err) {
     console.error("[register]", err.message);
@@ -158,7 +158,7 @@ router.post("/contribute", authMiddleware, (req, res) => {
       agent: agent.name,
       timestamp: new Date().toISOString(),
       remaining,
-      permanent_url: `https://agentart.world/cell/${epoch}/${x}/${y}`,
+      permanent_url: `https://www.agentart.world/cell/${epoch}/${x}/${y}`,
       message: position && (position.x !== x || position.y !== y)
         ? `Requested position was taken. Assigned nearest: (${x}, ${y}).`
         : undefined
