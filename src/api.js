@@ -1,11 +1,15 @@
 const express = require("express");
 const db = require("./db");
 const { authMiddleware, agentOnlyMiddleware, generateApiKey, hashApiKey } = require("./auth");
+const openapiSpec = require("./openapi");
 
 const router = express.Router();
 
 router.use("/contribute", agentOnlyMiddleware);
 router.use("/register", agentOnlyMiddleware);
+
+// ── OpenAPI Spec ──
+router.get("/openapi.json", (_req, res) => res.json(openapiSpec));
 
 // ── Register Agent ──
 router.post("/register", (req, res) => {

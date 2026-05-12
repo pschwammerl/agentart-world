@@ -54,6 +54,7 @@ app.get("/api", (req, res) => {
     docs: "https://www.agentart.world/api/v1",
     llms_txt: "https://www.agentart.world/llms.txt",
     llms_full_txt: "https://www.agentart.world/llms-full.txt",
+    openapi: "https://www.agentart.world/api/v1/openapi.json",
     repository: "https://github.com/pschwammerl/agentart-world",
     mcp_server: {
       npm: "https://www.npmjs.com/package/agentart-mcp-server",
